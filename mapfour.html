@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<!--
+v. 4
+Den här versionen använder geoxml3  för att rendera kmllagret eftersom det via maps api:et
+inte går att manipulera objekten i kmllagret med javascripti browsern.
+
+1. Zomma och centrera kartan så att den visar allt innehåll initialt.
+2. Skapa möjlighet att ändra förg på kmllagrets objekt, t.ex. vid mouseover.
+3. Centrera kartan och zooma till marker för vägbeskrivningens startpunkt (vid click på knapp).
+
+-->
+<html>
+  <head>
+    <title>Map Four</title>
+    <meta name="viewport" content="initial-scale=1.0">
+    <meta charset="utf-8">
+    <style>
+      /* Always set the map height explicitly to define the size of the div
+       * element that contains the map. */
+      #map {
+        height: 100%;
+      }
+      /* Optional: Makes the sample page fill the window. */
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+
+      .btns {
+        position: fixed;
+        top: 20px;
+        right: 60px;
+        z-index: 2000;
+      }
+
+    </style>
+  </head>
+  <body>
+    <div class="btns">
+      <button type="button" onclick="setA()">Goto A</button>
+      <button type="button" onclick="setB()">Goto B</button>
+      <!-- <button type="button" onclick="stopTimer()">Goto B</button> -->
+    </div>
+    <div id="map"></div>
+    <script src="js/geoxml3.js" ></script>
+
+    <script>
+      var map;
+      var initCenter = {lat: 71.362131048299155, lng: 12.347414916992197};
+      var kmlParser;
+      // var src = "http://zaccheus.se/files/directions.kml";
+      var src = "stages/directions.kml";
+      var kmlLayer;
+      var kmlPolyline;
+      var initBound;
+      var workingBonds;
+      var count, timer, timer2;
+      var stage1, stage2, stage3, stage4, stage5;
+      var src1 = "http://zaccheus.se/files/malmo-leipzig.kml", src2 = "http://zaccheus.se/files/Bil-dag1.kml", src3 = "http://zaccheus.se/files/Bil-dag2.kml",
+          src4 = "http://zaccheus.se/files/Bil-dag3.kml", src5 = "http://zaccheus.se/files/Bil-dag4.kml";
+      var stages = [];
+
+      // var intv = setInterval(function(){console.log('running')}, 2000);
+      function run(){
+        console.log('running');
+      }
+
+      function testData2(){
+        console.log("TESTDATA");
+        count++;
+        if(map.getBounds()){
+          if(stages.every(function(element){return element.getDefaultViewport();})){
+            clearInterval(timer);
+            console.log('VALID!');
+            initViewport();
+          }
+        }
+        if(count > 10){
+          clearInterval(timer);
+          console.log("Data loading timed out");
+        }
+      }
+
+      function initMap() {
+        // timer2 = setInterval(function(){console.log('running')}, 2000);
+
+        // var initCenter = {lat: 71.362131048299155, lng: 12.347414916992197}; //51.362131048299155
+        map = new google.maps.Map(document.getElementById('map'), {
+          center: initCenter,
+          zoom: 6
+        });
+
+        kmlParser = new geoXML3.parser({map: map, afterParse: initViewport, failedParse: loggErr});
+
+        kmlParser.parse(src);
+
+        // stage1 = new google.maps.KmlLayer(src1, {
+        //   suppressInfoWindows: false, //true,
+        //   preserveViewport: true, //false,
+        //   map: map
+        // });
+        // stages.push(stage1);
+        // stage2 = new google.maps.KmlLayer(src2, {
+        //   suppressInfoWindows: false, //true,
+        //   preserveViewport: true, //false,
+        //   map: map
+        // });
+        // stages.push(stage2);
+        // stage3 = new google.maps.KmlLayer(src3, {
+        //   suppressInfoWindows: false, //true,
+        //   preserveViewport: true, //false,
+        //   map: map
+        // });
+        // stages.push(stage3);
+        // stage4 = new google.maps.KmlLayer(src4, {
+        //   suppressInfoWindows: false, //true,
+        //   preserveViewport: true, //false,
+        //   map: map
+        // });
+        // stages.push(stage4);
+        // stage5 = new google.maps.KmlLayer(src5, {
+        //   suppressInfoWindows: false, //true,
+        //   preserveViewport: true, //false,
+        //   map: map
+        // });
+        // stages.push(stage5);
+        //
+        // workingBonds = new google.maps.LatLngBounds();
+        //
+        // stage1.addListener('click', function(event) {
+        //   var content = event.featureData.infoWindowHtml;
+        //   console.log(content);
+        //   // var testimonial = document.getElementById('capture');
+        //   // testimonial.innerHTML = content;
+        //   console.log('KML clicked!');
+        // });
+        //
+        // count = 0;
+        // timer = setInterval(testData2, 500);
+
+      }
+
+
+      function initViewport(){
+        kmlLayer = kmlParser.docs[0];
+        kmlPolyline = kmlLayer.placemarks[0].polyline;
+        var polylineOptions = {
+          strokeColor: '#9900ff',
+          strokeOpacity: 0.65,
+          strokeWeight: 8
+        }
+        var polylineHighlightOptions = {
+          strokeColor: '#ff0099',
+          strokeOpacity: 0.65,
+          strokeWeight: 8
+        }
+        kmlPolyline.setOptions(polylineOptions);
+
+        console.log(kmlParser.docs[0].placemarks[1].marker);
+
+        kmlPolyline.addListener("mouseover", function(){
+          kmlPolyline.setOptions(polylineHighlightOptions);
+        });
+        kmlPolyline.addListener("mouseout", function(){
+          kmlPolyline.setOptions(polylineOptions);
+        });
+
+      }
+
+      function loggErr(){
+        console.log('KML layer parsing failed.');
+      }
+
+      function setA(){
+        var pos = kmlParser.docs[0].placemarks[1].marker.getPosition();
+        console.log(map.getBounds().toString());
+        map.setZoom(10);
+        map.panTo(pos) //({lat: -33.8674572, lng: 151.2087026});
+      }
+      function setB(){
+        var pos = kmlParser.docs[0].placemarks[2].marker.getPosition();
+        map.panTo(pos);
+        map.setZoom(6);
+      }
+      function stopTimer(){
+        clearInterval(timer2);
+      }
+    </script>
+    <script src="js/jquery-3.2.1.min.js" ></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCMdLKF7qRh9bxSnxvmv30dq5Oo5KCWiM8&callback=initMap"
+    async defer></script>
+  </body>
+</html>

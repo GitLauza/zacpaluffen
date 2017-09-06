@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<!--
+v. 4
+Den här versionen använder geoxml3  för att rendera kmllagret eftersom det via maps api:et
+inte går att manipulera objekten i kmllagret med javascripti browsern.
+
+-1. Zomma och centrera kartan så att den visar allt innehåll initialt.
+-2. Skapa möjlighet att ändra förg på kmllagrets objekt, t.ex. vid mouseover.
+-3. Centrera kartan och zooma till marker för vägbeskrivningens startpunkt (vid click på knapp).
+4. Ladda ett antal kml filer (som var och en motsvarar en etapp).
+5. Sätt rätt styling på alla sektioner och marker.
+6. Koppla handler för att byta style för sträckan vid mouseover.
+7. Koppla handler för att sätta bounds till klickad sträcka.
+
+
+-->
+<html>
+  <head>
+    <title>Map Five</title>
+    <meta name="viewport" content="initial-scale=1.0">
+    <meta charset="utf-8">
+    <style>
+      /* Always set the map height explicitly to define the size of the div
+       * element that contains the map. */
+      #map {
+        height: 100%;
+      }
+      /* Optional: Makes the sample page fill the window. */
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+
+      .btns {
+        position: fixed;
+        top: 20px;
+        right: 60px;
+        z-index: 2000;
+      }
+
+    </style>
+  </head>
+  <body>
+    <div class="btns">
+      <button type="button" onclick="setA()">Goto A</button>
+      <button type="button" onclick="setB()">Goto B</button>
+      <!-- <button type="button" onclick="stopTimer()">Goto B</button> -->
+    </div>
+    <div id="map"></div>
+    <script src="js/geoxml3.js" ></script>
+
+    <script>
+      var map;
+      var initCenter;
+      var kmlParser;
+      // var src = "stages/directions.kml";
+      var src = ['stages/Malmo-Leipzig.kml', 'stages/Bil-dag1.kml', 'stages/Bil-dag2.kml', 'stages/Bil-dag3.kml', 'stages/Bil-dag4.kml'];
+      var stages = [];
+      var routeBounds;
+
+      // var intv = setInterval(function(){console.log('running')}, 2000);
+      function run(){
+        console.log('running');
+      }
+
+      // function stageNavigator(){
+      //   var currentStage = 0;
+      //   var currentStop = 0;
+      //
+      //   function nextStop(){
+      //     if(currentStop >= stages[currentStage].markers.length){
+      //       if(currentStage ! >= stages){
+      //         var center = stages
+      //       }
+      //     }
+      //   }
+      // }
+
+      function testData2(){
+        console.log("TESTDATA");
+        count++;
+        if(map.getBounds()){
+          if(stages.every(function(element){return element.getDefaultViewport();})){
+            clearInterval(timer);
+            console.log('VALID!');
+            initViewport();
+          }
+        }
+        if(count > 10){
+          clearInterval(timer);
+          console.log("Data loading timed out");
+        }
+      }
+
+      function initMap() {
+        // timer2 = setInterval(function(){console.log('running')}, 2000);
+
+        // var initCenter = {lat: 71.362131048299155, lng: 12.347414916992197}; //51.362131048299155
+        map = new google.maps.Map(document.getElementById('map'), {
+          center: initCenter,
+          zoom: 6
+        });
+
+        kmlParser = new geoXML3.parser({map: map, suppressInfoWindows: true, afterParse: initViewport, failedParse: loggErr});
+        kmlParser.parse(src);
+
+      }
+
+
+      function initViewport(){
+        console.log('INIT!!!!!!!!');
+        stages = kmlParser.docs;
+        var polylineOptions = {
+          strokeColor: '#9900ff',
+          strokeOpacity: 0.65,
+          strokeWeight: 8
+        }
+        var polylineHighlightOptions = {
+          strokeColor: '#ff0099',
+          strokeOpacity: 0.65,
+          strokeWeight: 8
+        }
+        routeBounds = new google.maps.LatLngBounds();
+        for(var i=0; i<stages.length; i++){
+          var marks = stages[i].placemarks;
+          console.log(stages[i].baseUrl);
+          for(var ii=0; ii<marks.length; ii++){
+            if(marks[ii].polyline){
+              marks[ii].polyline.setOptions(polylineOptions);
+              marks[ii].polyline.addListener("mouseover", (function(me){
+                return function() {
+                  me.setOptions(polylineHighlightOptions);
+                  console.log('over: ' + me.title);
+                };
+              })(marks[ii].polyline));
+              marks[ii].polyline.addListener("mouseout", (function(me){
+                return function(){
+                  me.setOptions(polylineOptions);
+                  console.log('out: ' + me.title);
+                };
+              })(marks[ii].polyline));
+              marks[ii].polyline.addListener("click", (function(stage){
+                return function(){
+                  map.fitBounds(stage.bounds);
+                  console.log('out Bounds: ' + stage.bounds.toJSON());
+                };
+              })(stages[i]));
+              console.log('Is Polyline');
+            }else if(marks[ii].Point){
+              console.log('Is Marker');
+              // console.log(marks[ii]);
+            }else{
+              console.log('Is something else');
+              // console.log(marks[ii]);
+            }
+          }
+          routeBounds.union(stages[i].bounds);
+        }
+        // kmlPolyline = stages[0].placemarks[0].polyline;
+
+        // kmlPolyline.setOptions(polylineOptions);
+
+        console.log(stages[0].placemarks[1].marker);
+
+        // kmlPolyline.addListener("mouseover", function(){
+        //   kmlPolyline.setOptions(polylineHighlightOptions);
+        // });
+        // kmlPolyline.addListener("mouseout", function(){
+        //   kmlPolyline.setOptions(polylineOptions);
+        // });
+
+      }
+
+      function loggErr(){
+        console.log('KML layer parsing failed.');
+      }
+
+      function setA(){
+        map.fitBounds(routeBounds);
+        var pos = kmlParser.docs[0].placemarks[1].marker.getPosition();
+        console.log(map.getBounds().toString());
+        map.panTo(pos) //({lat: -33.8674572, lng: 151.2087026});
+      }
+      function setB(){
+        var pos = kmlParser.docs[0].placemarks[2].marker.getPosition();
+        map.panTo(pos);
+      }
+      function stopTimer(){
+        clearInterval(timer2);
+      }
+    </script>
+    <script src="js/jquery-3.2.1.min.js" ></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCMdLKF7qRh9bxSnxvmv30dq5Oo5KCWiM8&callback=initMap"
+    async defer></script>
+  </body>
+</html>

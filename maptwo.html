@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<!--
+1. Zomma kartan så att den visar allt innehåll initialt.
+2. Centrera kartan till marker för vägbeskrivningens startpunkt.
+-->
+<html>
+  <head>
+    <title>Map Two</title>
+    <meta name="viewport" content="initial-scale=1.0">
+    <meta charset="utf-8">
+    <style>
+      /* Always set the map height explicitly to define the size of the div
+       * element that contains the map. */
+      #map {
+        height: 100%;
+      }
+      /* Optional: Makes the sample page fill the window. */
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+
+      .btns {
+        position: fixed;
+        top: 20px;
+        right: 60px;
+        z-index: 2000;
+      }
+
+    </style>
+  </head>
+  <body>
+    <div class="btns">
+      <button type="button" onclick="setA()">Goto A</button>
+      <!-- <button type="button" onclick="setB()">Goto B</button> -->
+      <button type="button" onclick="stopTimer()">Goto B</button>
+    </div>
+    <div id="map"></div>
+    <script>
+      var map;
+      var src = "http://zaccheus.se/files/directions.kml";
+      // var src = "http://zaccheus.se/files/testkarta.kml";
+      var kmlLayer;
+      var initBound;
+      var count, timer, timer2;
+
+      // var intv = setInterval(function(){console.log('running')}, 2000);
+      function run(){
+        console.log('running');
+      }
+
+      function run2(){
+        console.log('RUN2');
+        if (count > 10) {
+          clearInterval(timer);
+          console.log('timer stopped');
+        }else {
+          count++
+        }
+      }
+
+      function testData(){
+        console.log("TESTDATA");
+        if(map.getBounds() && kmlLayer.getDefaultViewport()){
+          clearInterval(timer);
+          console.log('VALID!');
+          initViewport();
+        }else if (count > 1){
+
+          clearInterval(timer);
+          console.log("Data loading timed out");
+        }else{
+          console.log(count);
+          ++count;
+        }
+      }
+
+      function initMap() {
+        // timer2 = setInterval(function(){console.log('running')}, 2000);
+
+        var uluru = {lat: -34.397, lng: 150.644};
+        map = new google.maps.Map(document.getElementById('map'), {
+          center: uluru,
+          zoom: 8
+        });
+        var markWollong = new google.maps.Marker({
+          position: uluru,
+          map: map
+        });
+        var markSidney = new google.maps.Marker({
+          position: {lat: -33.8674572, lng: 151.2087026},
+          map: map
+        });
+        var markNewc = new google.maps.Marker({
+          position: {lat: -32.9290165, lng: 151.7820408},
+          map: map
+        });
+
+        kmlLayer = new google.maps.KmlLayer(src, {
+          suppressInfoWindows: false, //true,
+          preserveViewport: true, //false,
+          map: map
+        });
+
+        kmlLayer.addListener('click', function(event) {
+          var content = event.featureData.infoWindowHtml;
+          console.log(content);
+          // var testimonial = document.getElementById('capture');
+          // testimonial.innerHTML = content;
+          console.log('KML clicked!');
+        });
+
+        count = 0;
+        timer = setInterval(testData, 500);
+
+        // console.log(map.getBounds());
+        // if(!map.getBounds() || !kmlLayer.getDefaultViewport()){
+        //   map.addListener('bounds_changed', initViewport);
+        //   console.log('NO BOUNDS');
+        // }
+
+        // console.log(map.getBounds().toString());
+        // console.log(kmlLayer.getDefaultViewport());
+        // map.fitBounds(map.getBounds().union(kmlLayer.getDefaultViewport()));
+
+      }
+
+      function initViewport(){
+        console.log('Now bounds are: ' + map.getBounds());
+        console.log('KMLlayer is now: ' + kmlLayer.getDefaultViewport());
+        map.fitBounds(map.getBounds().union(kmlLayer.getDefaultViewport()));
+        console.log('BOUNDS SET');
+      }
+
+
+      function setA(){
+        console.log(map.getBounds().toString());
+        map.panTo({lat: -33.8674572, lng: 151.2087026});
+      }
+      function setB(){
+        map.panTo({lat: -32.9290165, lng: 151.7820408});
+      }
+      function stopTimer(){
+        clearInterval(timer2);
+      }
+    </script>
+    <script src="js/jquery-3.2.1.min.js" ></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCMdLKF7qRh9bxSnxvmv30dq5Oo5KCWiM8&callback=initMap"
+    async defer></script>
+  </body>
+</html>

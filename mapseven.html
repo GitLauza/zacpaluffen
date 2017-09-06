@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<!--
+v. 4
+Den här versionen använder geoxml3  för att rendera kmllagret eftersom det via maps api:et
+inte går att manipulera objekten i kmllagret med javascripti browsern.
+
+-1. Zomma och centrera kartan så att den visar allt innehåll initialt.
+-2. Skapa möjlighet att ändra förg på kmllagrets objekt, t.ex. vid mouseover.
+-3. Centrera kartan och zooma till marker för vägbeskrivningens startpunkt (vid click på knapp).
+-4. Ladda ett antal kml filer (som var och en motsvarar en etapp).
+-5. Sätt rätt styling på alla sektioner och marker.
+-6. Koppla handler för att byta style för sträckan vid mouseover.
+-7. Koppla handler för att sätta bounds till klickad sträcka.
+-8. Skapa objekt som hanterar alla sträckor och stopp samt håller reda på vilken som
+  som är aktuell för tillfället och gör det möjligt att stega sig fram längs rutten.
+  Först måste man sortera listan med goxml3 objekt så att de hamnar i rätt ordning. Samma ordning som
+  src arrayen har.
+-9. Finjustera stegningsfunktionen så att stop och sträckor både aktiveras och deaktiveras. Städa upp
+  och snygga till kod och struktur. T.ex. så samlas alla style [Options] i ett globalt objekt.
+
+-->
+<html>
+  <head>
+    <title>Map Seven</title>
+    <meta name="viewport" content="initial-scale=1.0">
+    <meta charset="utf-8">
+    <style>
+      /* Always set the map height explicitly to define the size of the div
+       * element that contains the map. */
+      #map {
+        height: 100%;
+      }
+      /* Optional: Makes the sample page fill the window. */
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+
+      .btns {
+        position: fixed;
+        top: 20px;
+        right: 60px;
+        z-index: 2000;
+      }
+
+    </style>
+  </head>
+  <body>
+    <div class="btns">
+      <button type="button" onclick="setA()">Show full Route</button>
+      <button type="button" onclick="setB()">Goto B</button><br />
+      <!-- <button type="button" onclick="stopTimer()">Goto B</button> -->
+      <button id="prev" style="" type="button">Previous</button>
+      <button id="next" type="button">Next</button>
+    </div>
+    <div id="map"></div>
+    <script src="js/geoxml3.js" ></script>
+
+    <script>
+      var timer;
+      var count;
+      var map;
+      var initCenter;
+      var kmlParser;
+      // var src = "stages/directions.kml";
+      var src = ['stages/Malmo-Leipzig.kml', 'stages/Bil-dag1.kml', 'stages/Bil-dag2.kml', 'stages/Bil-dag3.kml', 'stages/Bil-dag4.kml', 'stages/Munchen-Badgastein.kml', 'stages/Badgastein-Zagreb.kml'];
+      var stages = [];
+      var stages2 = [];
+      var routeBounds;
+      var stgNav;
+      var infoWin;
+      var options = {
+        polylineOptions : {
+          strokeColor: '#9900ff',
+          strokeOpacity: 0.65,
+          strokeWeight: 8
+        },
+        polylineHighlightOptions : {
+          strokeColor: '#ff0099',
+          strokeOpacity: 0.65,
+          strokeWeight: 8
+        },
+        polylineActiveOptions : {
+          strokeColor: '#4400ee',
+          strokeOpacity: 0.65,
+          strokeWeight: 9
+        },
+        markerOptions : {
+            icon: { url : 'http://maps.google.com/mapfiles/kml/paddle/blu-circle.png',
+            scaledSize : { width : 32, height : 32 }
+            // scaledSize : new google.maps.Size(32,32)
+          }
+        },
+        markerHighlightOptions : {
+            icon: { url : 'http://maps.google.com/mapfiles/kml/paddle/grn-circle.png',
+            scaledSize : { width : 32, height : 32 }
+              // scaledSize = new google.maps.Size(32,32)
+            }
+        },
+        markerActiveOptions : {
+            icon: { url : 'http://maps.google.com/mapfiles/kml/paddle/pink-stars.png',
+            scaledSize : { width : 32, height : 32 }
+          }
+        }
+      }
+
+      // var intv = setInterval(function(){console.log('running')}, 2000);
+      function run(){
+        console.log('running');
+      }
+
+      function stageNavigator(){
+        var currentStageIX = 0;
+        var currentStopIX = 0;
+        var currentStage;
+        var currentStop;
+        var lastStop = false;
+        var firstStop = true;
+        document.getElementById('prev').setAttribute('disabled', '');
+
+        this.getCurrentStage = function(){
+          return stages[currentStageIX];
+        }
+
+        this.getCurrentStop = function(){
+          // return stages[currentStageIX].markers[currentStopIX];
+          return stages[currentStageIX].markers[currentStopIX];
+        }
+
+        this.setCurrentStage = function(obj){
+          // var poly = getStagePolyline(this.getCurrentStage());
+          if(currentStage)
+            getStagePolyline(currentStage).setOptions(options.polylineOptions);
+          // currentStageIX = ix;
+          currentStage = obj; //this.getCurrentStage();
+          getStagePolyline(currentStage).setOptions(options.polylineActiveOptions);
+        }
+
+        this.setCurrentStop = function(obj){
+          infoWin.close();
+          if(currentStop)
+            currentStop.setOptions(options.markerOptions);
+          console.log('OLD STOP: ' + this.getCurrentStop().title);
+          // currentStopIX = ix;
+          currentStop = obj; //this.getCurrentStop();
+          currentStop.setOptions(options.markerHighlightOptions);
+          // sectionPolyPlacemark.polyline.setOptions(polylineActiveOptions);
+          map.panTo(currentStop.position);
+          infoWin.setContent(currentStop.title);
+          infoWin.open(map, currentStop);
+        }
+
+        this.nextStop = function(){
+          if(!lastStop){
+            if(currentStopIX >= stages[currentStageIX].markers.length-1){
+              if(!(currentStageIX >= stages.length-1)){
+                ++currentStageIX;
+                this.setCurrentStage(stages[currentStageIX]);
+                currentStopIX = 0;
+              }
+            }else{
+              ++currentStopIX;
+              if((currentStopIX >= stages[currentStageIX].markers.length-1) && ((currentStageIX >= stages.length-1))){
+                lastStop = true;
+                document.getElementById('next').setAttribute('disabled', '');
+              }
+            }
+            // goToStop(this.getCurrentStop());
+            this.setCurrentStop(stages[currentStageIX].markers[currentStopIX]);
+            console.log('CURRENT MARKER:' + this.getCurrentStop().title);
+          }
+          if(firstStop){
+            firstStop = false;
+            document.getElementById('prev').removeAttribute('disabled', '');
+          }
+        }
+
+        this.prevStop = function(){
+          if(!firstStop){
+            if(currentStopIX <= 0){
+              if(!(currentStageIX <= 0)){
+                --currentStageIX;
+                this.setCurrentStage(stages[currentStageIX]);
+                currentStopIX = stages[currentStageIX].markers.length-1;
+              }
+            }else{
+              --currentStopIX;
+              if(currentStopIX == 0 && currentStageIX == 0){
+                firstStop = true;
+                document.getElementById('prev').setAttribute('disabled', '');
+              }
+            }
+            // goToStop(this.getCurrentStop());
+            this.setCurrentStop(stages[currentStageIX].markers[currentStopIX]);
+            console.log('CURRENT MARKER:' + this.getCurrentStop().title);
+          }
+          if(lastStop){
+            lastStop = false;
+            document.getElementById('next').removeAttribute('disabled', '');
+          }
+        }
+      }
+
+      function goToStop(marker){
+        infoWin.close();
+        var pos = marker.position;
+        var info = marker.title;
+        var polylineActiveOptions = {
+          strokeColor: '#4400ee',
+          strokeOpacity: 0.65,
+          strokeWeight: 9
+        }
+        var sectionPolyPlacemark = stgNav.getCurrentStage().placemarks.find(
+          function(obj){
+            if(obj.polyline) return obj
+          });
+        marker.setOptions(markerActiveOptions);
+        sectionPolyPlacemark.polyline.setOptions(polylineActiveOptions);
+        map.panTo(pos);
+        infoWin.setContent(info);
+        infoWin.open(map, marker);
+      }
+
+      function testDataAvail(){
+        console.log("TESTING DATA AVAILABLE.");
+        count++;
+        if(stages.every(function(element){return element.markers.length > 0;})){
+          clearInterval(timer);
+          console.log('DATA AVAILABLE!');
+          initMarkers();
+        }
+        if(count > 10){
+          clearInterval(timer);
+          console.log("Data loading timed out!");
+        }
+      }
+
+      function orderStagesBySrc(){
+        var srcArr = src;
+        var parsedArr = kmlParser.docs;
+        var parsedUrls = parsedArr.map(function(obj){
+          return obj.url;
+        })
+        var retArr=[];
+        var ix;
+        for(i = 0;i < parsedUrls.length; i++){
+          console.log('SrcUrl: ' + srcArr[i]);
+          ix = parsedUrls.indexOf(srcArr[i])
+          retArr[i] = parsedArr[ix];
+        }
+        return retArr;
+      }
+
+      function getStagePolyline(stage){
+        // console.log('STAGEURL: ' + stage.url);
+        for(var i=0; i<stage.placemarks.length; i++){
+          if(stage.placemarks[i].polyline)
+            return stage.placemarks[i].polyline;
+        }
+      }
+
+      // var sectionPolyPlacemark = stgNav.getCurrentStage().placemarks.find(
+      //   function(obj){
+      //     if(obj.polyline) return obj
+      //   });
+
+      function initMap() {
+        // timer2 = setInterval(function(){console.log('running')}, 2000);
+
+        // var initCenter = {lat: 71.362131048299155, lng: 12.347414916992197}; //51.362131048299155
+        map = new google.maps.Map(document.getElementById('map'), {
+          center: initCenter,
+          zoom: 6
+        });
+
+        kmlParser = new geoXML3.parser({map: map, suppressInfoWindows: true, afterParse: initViewport, failedParse: loggErr});
+        kmlParser.parse(src);
+
+      }
+
+      var markerIcon;
+      var markerIconOver;
+      var markerIconActive;
+      var markerOptions, markerHighlightOptions, markerActiveOptions;
+
+      function initMarkers(){
+        console.log('INIT MARKERS');
+        markerIcon  = new Object();
+        markerIcon.url = 'http://maps.google.com/mapfiles/kml/paddle/blu-circle.png';
+        markerIcon.scaledSize = new google.maps.Size(32,32);
+
+        markerIconOver = new Object();
+        markerIconOver.url = 'http://maps.google.com/mapfiles/kml/paddle/grn-circle.png';
+        markerIconOver.scaledSize = new google.maps.Size(32,32);
+
+        markerIconActive = new Object();
+        markerIconActive.url = 'http://maps.google.com/mapfiles/kml/paddle/pink-stars.png';
+        markerIconActive.scaledSize = new google.maps.Size(32,32);
+
+        _markerOptions = {
+            icon: markerIcon
+        }
+        _markerHighlightOptions = {
+            icon: markerIconOver
+        }
+        _markerActiveOptions = {
+            icon: markerIconActive
+        }
+
+        for(var j=0; j<stages.length; j++){
+          console.log('Markers length: ' + stages[j].markers.length);
+          for(var jj=0; jj < stages[j].markers.length; jj++){
+            var marker = stages[j].markers[jj];
+            console.log('MARKER NAME: ' + marker.name);
+            marker.setOptions(_markerOptions);
+            marker.addListener("mouseover", (function(me){
+              return function() {
+                me.setOptions(_markerHighlightOptions);
+                console.log('over: ' + me.title);
+              };
+            })(marker));
+            marker.addListener("mouseout", (function(me){
+              return function(){
+                me.setOptions(_markerOptions);
+                console.log('out: ' + me.title);
+              };
+            })(marker));
+          }
+        }
+        stgNav.setCurrentStage(stages[0]);
+        stgNav.setCurrentStop(stages[0].markers[0]);
+      }
+
+      function initViewport(){
+        console.log('INIT!!!!!!!!');
+        stages = kmlParser.docs;
+        stages = orderStagesBySrc();
+
+        var polylineOptions = {
+          strokeColor: '#9900ff',
+          strokeOpacity: 0.65,
+          strokeWeight: 8
+        }
+        var polylineHighlightOptions = {
+          strokeColor: '#ff0099',
+          strokeOpacity: 0.65,
+          strokeWeight: 8
+        }
+
+        routeBounds = new google.maps.LatLngBounds();
+        for(var i=0; i<stages.length; i++){
+          var marks = stages[i].placemarks;
+          console.log(stages[i].baseUrl);
+          for(var ii=0; ii<marks.length; ii++){
+            if(marks[ii].polyline){
+              marks[ii].polyline.setOptions(polylineOptions);
+              marks[ii].polyline.addListener("mouseover", (function(me){
+                return function() {
+                  me.setOptions(polylineHighlightOptions);
+                  console.log('over: ' + me.title);
+                };
+              })(marks[ii].polyline));
+              marks[ii].polyline.addListener("mouseout", (function(me){
+                return function(){
+                  me.setOptions(polylineOptions);
+                  console.log('out: ' + me.title);
+                };
+              })(marks[ii].polyline));
+              marks[ii].polyline.addListener("click", (function(stage){
+                return function(){
+                  map.fitBounds(stage.bounds);
+                  console.log('out Bounds: ' + stage.bounds.toJSON());
+                };
+              })(stages[i]));
+              console.log('Is Polyline');
+            }else if(marks[ii].Point){
+              // marks[ii].marker.setOptions(markerOptions);
+              // marks[ii].marker.addListener("mouseover", (function(me){
+              //   return function() {
+              //     me.setOptions(markerHighlightOptions);
+              //     console.log('over: ' + me.title);
+              //   };
+              // })(marks[ii].marker));
+              // marks[ii].polyline.addListener("mouseout", (function(me){
+              //   return function(){
+              //     me.setOptions(polylineOptions);
+              //     console.log('out: ' + me.title);
+              //   };
+              // })(marks[ii].marker));
+              // console.log('Is Marker: ' + stages[i].placemarks[ii].marker.title);//+ marks[ii].marker.title);
+              // console.log('MARKS: ' + marks[ii]);
+              // console.log('PLACEMARKS: ' + '(' + i + ':' + ii + ')' + stages[i].placemarks[ii].active);
+              // console.log('MARKS: ' + '(' + i + ':' + ii + ')' + marks[ii].styleBaseUrl);
+              console.log('Is Marker: ');
+            }else{
+              console.log('Is something else');
+              // console.log(marks[ii]);
+            }
+
+            // console.log('MARK LENGTH: ' + 'IX: ' + i + ': ' + stages[i].markers.length);
+
+          }
+
+          routeBounds.union(stages[i].bounds);
+          stgNav = new stageNavigator();
+          infoWin = new google.maps.InfoWindow({content:'No current stop is set', maxWidth:300});
+        }
+        // kmlPolyline = stages[0].placemarks[0].polyline;
+
+        // kmlPolyline.setOptions(polylineOptions);
+
+        document.getElementById('next').addEventListener("click", function(){
+            stgNav.nextStop()
+        });
+        document.getElementById('prev').addEventListener("click", function(){
+            stgNav.prevStop()
+        });
+
+        console.log(stages[0].placemarks[1].marker);
+
+        // kmlPolyline.addListener("mouseover", function(){
+        //   kmlPolyline.setOptions(polylineHighlightOptions);
+        // });
+        // kmlPolyline.addListener("mouseout", function(){
+        //   kmlPolyline.setOptions(polylineOptions);
+        // });
+
+        timer = setInterval(testDataAvail, 500);
+
+
+      }
+
+      function loggErr(){
+        console.log('KML layer parsing failed.');
+      }
+
+      function setA(){
+        map.fitBounds(routeBounds);
+        var pos = kmlParser.docs[0].placemarks[1].marker.getPosition();
+        console.log(map.getBounds().toString());
+        map.panTo(pos) //({lat: -33.8674572, lng: 151.2087026});
+      }
+      function setB(){
+        var pos = kmlParser.docs[0].placemarks[2].marker.getPosition();
+        map.panTo(pos);
+      }
+      function stopTimer(){
+        clearInterval(timer2);
+      }
+    </script>
+    <script src="js/jquery-3.2.1.min.js" ></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCMdLKF7qRh9bxSnxvmv30dq5Oo5KCWiM8&callback=initMap"
+    async defer></script>
+  </body>
+</html>
